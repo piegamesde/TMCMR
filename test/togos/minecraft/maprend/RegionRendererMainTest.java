@@ -3,11 +3,10 @@ package togos.minecraft.maprend;
 import java.io.File;
 
 import junit.framework.TestCase;
-
-import togos.minecraft.maprend.RegionRenderer.RegionRendererCommand;
+import togos.minecraft.maprend.command.RegionRendererCommand;
 
 public class RegionRendererMainTest extends TestCase {
-	private RegionRenderer.RegionRendererCommand main;
+	private RegionRendererCommand main;
 
 	public void testDefaultArguments() throws Exception {
 		main = RegionRendererCommand.fromArguments();

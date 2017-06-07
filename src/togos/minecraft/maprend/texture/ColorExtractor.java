@@ -10,8 +10,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 import javax.imageio.ImageIO;
-
-import togos.minecraft.maprend.Color;
+import togos.minecraft.maprend.core.Color;
 
 public final class ColorExtractor
 {

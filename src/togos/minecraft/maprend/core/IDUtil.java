@@ -1,4 +1,4 @@
-package togos.minecraft.maprend;
+package togos.minecraft.maprend.core;
 
 public class IDUtil
 {
