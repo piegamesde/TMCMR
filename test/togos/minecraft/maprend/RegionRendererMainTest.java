@@ -3,7 +3,7 @@ package togos.minecraft.maprend;
 import java.io.File;
 
 import junit.framework.TestCase;
-import togos.minecraft.maprend.command.RegionRendererCommand;
+import togos.minecraft.maprend.commandstandalone.RegionRendererCommand;
 
 public class RegionRendererMainTest extends TestCase {
 	private RegionRendererCommand main;

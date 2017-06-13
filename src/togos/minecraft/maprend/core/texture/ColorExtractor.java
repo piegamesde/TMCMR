@@ -1,4 +1,4 @@
-package togos.minecraft.maprend.texture;
+package togos.minecraft.maprend.core.texture;
 
 import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
@@ -10,7 +10,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 import javax.imageio.ImageIO;
-import togos.minecraft.maprend.core.Color;
+import togos.minecraft.maprend.core.color.Color;
 
 public final class ColorExtractor
 {

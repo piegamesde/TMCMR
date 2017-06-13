@@ -1,4 +1,4 @@
-package togos.minecraft.maprend.texture;
+package togos.minecraft.maprend.core.texture;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import javax.imageio.ImageIO;
-import togos.minecraft.maprend.core.Color;
+import togos.minecraft.maprend.core.color.Color;
 
 /**
  * Interprets forth-like scripts to extract color data from texture maps.

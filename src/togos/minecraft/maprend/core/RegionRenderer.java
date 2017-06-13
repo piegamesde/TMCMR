@@ -8,12 +8,15 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 import javax.imageio.ImageIO;
-import org.jnbt.*;
-import togos.minecraft.maprend.core.BiomeColors.Biome;
-import togos.minecraft.maprend.core.BlockColors.Block;
-import togos.minecraft.maprend.core.RegionMap.Region;
-import togos.minecraft.maprend.io.ContentStore;
-import togos.minecraft.maprend.io.RegionFile;
+import org.joml.Vector2i;
+import com.flowpowered.nbt.CompoundTag;
+import togos.minecraft.maprend.core.color.BiomeColors;
+import togos.minecraft.maprend.core.color.BiomeColors.Biome;
+import togos.minecraft.maprend.core.color.BlockColors;
+import togos.minecraft.maprend.core.color.BlockColors.Block;
+import togos.minecraft.maprend.core.color.Color;
+import togos.minecraft.maprend.core.io.ContentStore;
+import togos.minecraft.maprend.core.io.RegionFile;
 
 public class RegionRenderer {
 
@@ -55,68 +58,6 @@ public class RegionRenderer {
 		biomeColors = settings.biomeMapFile == null ? BiomeColors.loadDefault() : BiomeColors.load(settings.biomeMapFile);
 
 		this.air16Color = Color.overlay(0, getColor(0, 0, 0), 16);
-	}
-
-	/**
-	 * Extract a 4-bit integer from a byte in an array, where the first nybble in each byte (even nybble indexes) occupies the lower 4 bits and the second (odd
-	 * nybble indexes) occupies the high bits.
-	 * 
-	 * @param arr the source array
-	 * @param index the index (in nybbles) of the desired 4 bits
-	 * @return the desired 4 bits as the lower bits of a byte
-	 */
-	protected static final byte nybble(byte[] arr, int index) {
-		return (byte) ((index % 2 == 0 ? arr[index / 2] : (arr[index / 2] >> 4)) & 0x0F);
-	}
-
-	/**
-	 * @param levelTag
-	 * @param maxSectionCount
-	 * @param sectionBlockIds block IDs for non-empty sections will be written to sectionBlockIds[sectionIndex][blockIndex]
-	 * @param sectionBlockData block data for non-empty sections will be written to sectionBlockData[sectionIndex][blockIndex]
-	 * @param sectionsUsed sectionsUsed[sectionIndex] will be set to true for non-empty sections
-	 */
-	protected static void loadChunkData(CompoundTag levelTag, int maxSectionCount, short[][] sectionBlockIds, byte[][] sectionBlockData, boolean[] sectionsUsed, byte[] biomeIds) {
-		for (int i = 0; i < maxSectionCount; ++i) {
-			sectionsUsed[i] = false;
-		}
-
-		Tag biomesTag = levelTag.getValue().get("Biomes");
-		if (biomesTag != null) {
-			System.arraycopy(((ByteArrayTag) biomesTag).getValue(), 0, biomeIds, 0, 16 * 16);
-		} else {
-			for (int i = 0; i < 16 * 16; i++) {
-				biomeIds[i] = -1;
-			}
-		}
-
-		for (Tag t : ((ListTag) levelTag.getValue().get("Sections")).getValue()) {
-			CompoundTag sectionInfo = (CompoundTag) t;
-			int sectionIndex = ((ByteTag) sectionInfo.getValue().get("Y")).getValue().intValue();
-			byte[] blockIdsLow = ((ByteArrayTag) sectionInfo.getValue().get("Blocks")).getValue();
-			byte[] blockData = ((ByteArrayTag) sectionInfo.getValue().get("Data")).getValue();
-			Tag addTag = sectionInfo.getValue().get("Add");
-			byte[] blockAdd = null;
-			if (addTag != null) {
-				blockAdd = ((ByteArrayTag) addTag).getValue();
-			}
-			short[] destSectionBlockIds = sectionBlockIds[sectionIndex];
-			byte[] destSectionData = sectionBlockData[sectionIndex];
-			sectionsUsed[sectionIndex] = true;
-			for (int y = 0; y < 16; ++y) {
-				for (int z = 0; z < 16; ++z) {
-					for (int x = 0; x < 16; ++x) {
-						int index = y * 256 + z * 16 + x;
-						short blockType = (short) (blockIdsLow[index] & 0xFF);
-						if (blockAdd != null) {
-							blockType |= nybble(blockAdd, index) << 8;
-						}
-						destSectionBlockIds[index] = blockType;
-						destSectionData[index] = nybble(blockData, index);
-					}
-				}
-			}
-		}
 	}
 
 	//// Color look-up ////
@@ -163,8 +104,6 @@ public class RegionRenderer {
 		return Color.multiplySolid(blockColor, biomeColor);
 	}
 
-	//// Handy color-manipulation functions ////
-
 	//// Rendering ////
 
 	public final Timer	timer	= new Timer();
@@ -186,7 +125,7 @@ public class RegionRenderer {
 		short[] surfaceHeight = new short[width * depth];
 
 		preRender(rf, surfaceColor, surfaceHeight);
-		Color.demultiplyAlpha(surfaceColor);
+		// Color.demultiplyAlpha(surfaceColor);
 		shade(surfaceHeight, surfaceColor);
 
 		BufferedImage bi = new BufferedImage(width, depth, BufferedImage.TYPE_INT_ARGB);
@@ -216,15 +155,11 @@ public class RegionRenderer {
 		for (int cz = 0; cz < 32; ++cz) {
 			for (int cx = 0; cx < 32; ++cx) {
 				resetInterval();
-				DataInputStream cis = rf.getChunkDataInputStream(cx, cz);
-				if (cis == null)
-					continue;
-				NBTInputStream nis = null;
 				try {
-					nis = new NBTInputStream(cis);
-					CompoundTag rootTag = (CompoundTag) nis.readTag();
-					CompoundTag levelTag = (CompoundTag) rootTag.getValue().get("Level");
-					loadChunkData(levelTag, maxSectionCount, sectionBlockIds, sectionBlockData, usedSections, biomeIds);
+					CompoundTag levelTag = rf.loadChunk(new Vector2i(cx, cz));
+					if (levelTag == null)
+						continue;// Chunk does not exist
+					RegionFile.loadChunkData(levelTag, maxSectionCount, sectionBlockIds, sectionBlockData, usedSections, biomeIds);
 					timer.regionLoading += getInterval();
 
 					for (int s = 0; s < maxSectionCount; ++s) {
@@ -282,16 +217,7 @@ public class RegionRenderer {
 					timer.preRendering += getInterval();
 				} catch (IOException e) {
 					System.err.println("Error reading chunk from " + rf.getFile() + " at " + cx + "," + cz);
-					e.printStackTrace(System.err);
-				} finally {
-					if (nis != null) {
-						try {
-							nis.close();
-						} catch (IOException e) {
-							System.err.println("Failed to close NBTInputStream!");
-							e.printStackTrace(System.err);
-						}
-					}
+					e.printStackTrace();
 				}
 			}
 		}

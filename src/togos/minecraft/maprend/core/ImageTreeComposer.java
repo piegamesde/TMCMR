@@ -1,8 +1,7 @@
 package togos.minecraft.maprend.core;
 
 import java.io.IOException;
-import togos.minecraft.maprend.core.RegionMap.Region;
-import togos.minecraft.maprend.io.ContentStore;
+import togos.minecraft.maprend.core.io.ContentStore;
 
 public class ImageTreeComposer {
 

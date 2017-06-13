@@ -1,4 +1,4 @@
-package togos.minecraft.maprend.io;
+package togos.minecraft.maprend.core.io;
 
 import java.io.File;
 import java.io.FileInputStream;

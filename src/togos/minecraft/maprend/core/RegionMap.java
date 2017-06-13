@@ -8,13 +8,6 @@ import java.util.regex.Pattern;
 
 public class RegionMap {
 
-	public static class Region {
-
-		public int	rx, rz;
-		public File	regionFile;
-		public File	imageFile;
-	}
-
 	public ArrayList<Region>	regions	= new ArrayList<Region>();
 	public int					minX	= Integer.MAX_VALUE, minZ = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
 

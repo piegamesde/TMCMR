@@ -1,4 +1,4 @@
-package togos.minecraft.maprend.core;
+package togos.minecraft.maprend.core.color;
 
 public class Color {
 

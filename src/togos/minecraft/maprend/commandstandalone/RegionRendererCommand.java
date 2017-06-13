@@ -1,4 +1,4 @@
-package togos.minecraft.maprend.command;
+package togos.minecraft.maprend.commandstandalone;
 
 import java.io.File;
 import java.io.IOException;
@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import togos.minecraft.maprend.core.*;
 import togos.minecraft.maprend.core.RegionRenderer.Timer;
+import togos.minecraft.maprend.core.color.IDUtil;
 
 public class RegionRendererCommand {
 

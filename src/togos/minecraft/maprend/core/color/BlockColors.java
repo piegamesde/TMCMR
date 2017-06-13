@@ -1,6 +1,6 @@
-package togos.minecraft.maprend.core;
+package togos.minecraft.maprend.core.color;
 
-import static togos.minecraft.maprend.core.IDUtil.parseInt;
+import static togos.minecraft.maprend.core.color.IDUtil.parseInt;
 import java.io.*;
 
 public final class BlockColors {
