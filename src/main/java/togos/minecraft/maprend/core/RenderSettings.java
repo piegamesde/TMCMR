@@ -9,10 +9,19 @@ public class RenderSettings {
 	public File		biomeMapFile				= null;
 	public int		minHeight					= Integer.MIN_VALUE;
 	public int		maxHeight					= Integer.MAX_VALUE;
+
+	/**
+	 * Above = brighter, below = darker TODO affect grass color in a more native way
+	 */
 	public int		shadingReferenceAltitude	= 64;
-	public int		altitudeShadingFactor		= 36;
+	/** Maximum brightness difference through shading */
+	public int		altitudeShadingFactor		= 50;
+	/** 0=Slope shading only, 1=Height shading only, 0.5=both */
+	public float	shadeBalanceFactor			= .2f;
+
 	public int		minAltitudeShading			= -20;
 	public int		maxAltitudeShading			= +20;
+
 	public String	mapTitle					= "Regions";
 	public int[]	mapScales					= { 1 };
 

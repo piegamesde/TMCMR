@@ -232,40 +232,45 @@ public class RegionRenderer {
 		int idx = 0;
 		for (int z = 0; z < depth; ++z) {
 			for (int x = 0; x < width; ++x, ++idx) {
-				float dyx, dyz;
 
 				if (color[idx] == 0)
 					continue;
 
+				// Gradient of height along x and z axis, between 0 and 255
+				float dyx, dyz;
 				if (x == 0)
-					dyx = height[idx + 1] - height[idx];
+					dyx = (height[idx + 1] - height[idx]) / 2;
 				else if (x == width - 1)
-					dyx = height[idx] - height[idx - 1];
+					dyx = (height[idx] - height[idx - 1]) / 2;
 				else
-					dyx = (height[idx + 1] - height[idx - 1]) * 2;
+					dyx = (height[idx + 1] - height[idx - 1]);
 
 				if (z == 0)
-					dyz = height[idx + width] - height[idx];
+					dyz = (height[idx + width] - height[idx]) / 2;
 				else if (z == depth - 1)
-					dyz = height[idx] - height[idx - width];
+					dyz = (height[idx] - height[idx - width]) / 2;
 				else
-					dyz = (height[idx + width] - height[idx - width]) * 2;
+					dyz = (height[idx + width] - height[idx - width]);
 
-				float shade = dyx + dyz;
-				if (shade > 10)
-					shade = 10;
-				if (shade < -10)
-					shade = -10;
+				// Addd gradients (0..512), normalize (0..1) and mix depending on the balance factor with the altitute shading (also 0..1)
+				float shade = (dyx + dyz) * (1 - settings.shadeBalanceFactor) / 512f + (height[idx] - settings.shadingReferenceAltitude) * settings.shadeBalanceFactor / 255f;
+				// if (shade > 10)
+				// shade = 10;
+				// if (shade < -10)
+				// shade = -10;
+				//
+				// int altShade = settings.altitudeShadingFactor * (height[idx] - settings.shadingReferenceAltitude) / 255;
+				// if (altShade < settings.minAltitudeShading)
+				// altShade = settings.minAltitudeShading;
+				// if (altShade > settings.maxAltitudeShading)
+				// altShade = settings.maxAltitudeShading;
 
-				int altShade = settings.altitudeShadingFactor * (height[idx] - settings.shadingReferenceAltitude) / 255;
-				if (altShade < settings.minAltitudeShading)
-					altShade = settings.minAltitudeShading;
-				if (altShade > settings.maxAltitudeShading)
-					altShade = settings.maxAltitudeShading;
+				// shade += altShade;
 
-				shade += altShade;
-
-				color[idx] = Color.shade(color[idx], (int) (shade * 8));
+				// Take tanh(shade * 2) for a better interpolation, multiply with shading factor
+				color[idx] = Color.shade(color[idx], (int) (settings.altitudeShadingFactor * Math.tanh(shade * 60)));
+				// color[idx] = Color.color(255, (int) (settings.altitudeShadingFactor * shade), (int) (settings.altitudeShadingFactor * shade), (int)
+				// (settings.altitudeShadingFactor * shade));
 			}
 		}
 	}

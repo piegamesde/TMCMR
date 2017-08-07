@@ -1,10 +1,7 @@
 
 package togos.minecraft.maprend.core.io;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.InflaterInputStream;
@@ -12,7 +9,7 @@ import org.joml.Vector2i;
 import com.flowpowered.nbt.*;
 import com.flowpowered.nbt.stream.NBTInputStream;
 
-public class RegionFile {
+public class RegionFile implements Closeable {
 
 	private RandomAccessFile	raf;
 	private Map<Vector2i, Long>	chunkPositions;
@@ -117,6 +114,7 @@ public class RegionFile {
 		return (byte) ((index % 2 == 0 ? arr[index / 2] : (arr[index / 2] >> 4)) & 0x0F);
 	}
 
+	@Override
 	public void close() throws IOException {
 		raf.close();
 		chunkPositions.clear();

@@ -4,6 +4,7 @@ import java.io.File;
 
 public class Region {
 
+	// TODO use Vector2i
 	public int	rx, rz;
 	public File	regionFile;
 	public File	imageFile;
