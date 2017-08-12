@@ -4,8 +4,11 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import togos.minecraft.maprend.core.*;
+import togos.minecraft.maprend.core.BoundingRect;
+import togos.minecraft.maprend.core.RegionMap;
+import togos.minecraft.maprend.core.RegionRenderer;
 import togos.minecraft.maprend.core.RegionRenderer.Timer;
+import togos.minecraft.maprend.core.RenderSettings;
 import togos.minecraft.maprend.core.color.IDUtil;
 
 public class RegionRendererCommand {
@@ -30,6 +33,7 @@ public class RegionRendererCommand {
 			"  -max-altitude-shading <x>       ; highest altitude shading modifier [20]\n" +
 			"  -title <title>     ; title to include with maps\n" +
 			"  -scales 1:<n>,...  ; list scales at which to render\n" +
+			"  -threads <n>       ; maximum number of CPU threads to use for rendering\n" +
 			"\n" +
 			"Input files may be 'region/' directories or individual '.mca' files.\n" +
 			"\n" +
@@ -103,6 +107,12 @@ public class RegionRendererCommand {
 					}
 				}
 				m.mapScales = invScales;
+			} else if ("-threads".equals(args[i])) {
+				m.numThreads = Integer.parseInt(args[++i]);
+				if (m.numThreads < 1) {
+					m.numThreads = 1;
+				}
+
 			} else {
 				m.errorMessage = "Unrecognised argument: " + args[i];
 				return m;
@@ -139,6 +149,7 @@ public class RegionRendererCommand {
 	public int				maxAltitudeShading			= +20;
 	public int				altitudeShadingFactor		= 36;
 	public int[]			mapScales					= { 1 };
+	public int				numThreads					= 2;
 	public String			mapTitle					= "Regions";
 
 	public String			errorMessage				= null;
@@ -155,7 +166,7 @@ public class RegionRendererCommand {
 		return getDefault(this.createImageTree, false);
 	}
 
-	public int run() throws IOException {
+	public int run() throws IOException, InterruptedException {
 		if (errorMessage != null) {
 			System.err.println("Error: " + errorMessage);
 			System.err.println(USAGE);
@@ -173,7 +184,7 @@ public class RegionRendererCommand {
 				mapTitle, mapScales);
 		RegionRenderer rr = new RegionRenderer(settings);
 
-		rr.renderAll(rm, outputDir, forceReRender);
+		rr.renderAll(rm, outputDir, forceReRender, numThreads);
 
 		if (debug) {
 			final Timer tim = rr.timer;

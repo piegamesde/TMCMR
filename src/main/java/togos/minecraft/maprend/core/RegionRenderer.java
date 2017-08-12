@@ -4,6 +4,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
@@ -33,6 +34,37 @@ public class RegionRenderer {
 
 		public String formatTime(String name, long millis) {
 			return String.format("%20s: % 8d   % 8.2f   % 8.4f", name, millis, millis / (double) regionCount, millis / (double) sectionCount);
+		}
+	}
+
+	class RenderThread extends Thread {
+
+		public ArrayList<Region>	regions;
+		public int					startIndex;
+		public int					endIndex;
+		public File					outputDir;
+		public boolean				force;
+
+		RenderThread() {
+
+		}
+
+		RenderThread(ArrayList<Region> regions, int startIndex, int endIndex, File outputDir, boolean force) throws IOException {
+			this.regions = regions;
+			this.startIndex = startIndex;
+			this.endIndex = endIndex;
+			this.outputDir = outputDir;
+			this.force = force;
+		}
+
+		@Override
+		public void run() {
+			try {
+				renderRegions(regions, startIndex, endIndex, outputDir, force);
+			} catch (IOException e) {
+				System.err.println("Error in threaded renderer!");
+				e.printStackTrace(System.err);
+			}
 		}
 	}
 
@@ -275,7 +307,7 @@ public class RegionRenderer {
 		}
 	}
 
-	public void renderAll(RegionMap rm, File outputDir, boolean force) throws IOException {
+	public void renderAll(RegionMap rm, File outputDir, boolean force, int numThreads) throws IOException, InterruptedException {
 		long startTime = System.currentTimeMillis();
 
 		if (!outputDir.exists())
@@ -285,78 +317,108 @@ public class RegionRenderer {
 			System.err.println("Warning: no regions found!");
 		}
 
-		for (Region r : rm.regions) {
-			if (r == null)
-				continue;
+		int numRegions = rm.regions.size();
 
+		if (numRegions < numThreads) {
+			numThreads = numRegions;
+		}
+
+		int regionInterval = numRegions / numThreads;
+		RenderThread[] renderThreads = new RenderThread[numThreads];
+
+		for (int i = 0; i < numThreads; i++) {
+			renderThreads[i] = new RenderThread(rm.regions, 0, 0, outputDir, force);
+			renderThreads[i].startIndex = regionInterval * i;
+			renderThreads[i].endIndex = regionInterval * (i + 1) - 1;
+			if (i == numThreads - 1) {
+				renderThreads[i].endIndex = numRegions - 1;
+			}
+			renderThreads[i].start();
+		}
+
+		for (int i = 0; i < numThreads; i++) {
+			renderThreads[i].join();
+		}
+
+		timer.total += System.currentTimeMillis() - startTime;
+	}
+
+	public void renderRegions(ArrayList<Region> regions, int startIndex, int endIndex, File outputDir, boolean force) throws IOException {
+		for (int i = startIndex; i <= endIndex; i++) {
+			renderRegion(regions.get(i), outputDir, force);
+		}
+	}
+
+	public void renderRegion(Region r, File outputDir, boolean force) throws IOException {
+		if (r == null)
+			return;
+
+		if (settings.debug)
+			System.err.print("Region " + pad(r.rx, 4) + ", " + pad(r.rz, 4) + "...");
+
+		String imageFilename = "tile." + r.rx + "." + r.rz + ".png";
+		File fullSizeImageFile = r.imageFile = new File(outputDir, imageFilename);
+
+		boolean fullSizeNeedsReRender = false;
+		if (force || !fullSizeImageFile.exists() || fullSizeImageFile.lastModified() < r.regionFile.lastModified()) {
+			fullSizeNeedsReRender = true;
+		} else {
 			if (settings.debug)
-				System.err.print("Region " + pad(r.rx, 4) + ", " + pad(r.rz, 4) + "...");
+				System.err.println("image already up-to-date");
+		}
 
-			String imageFilename = "tile." + r.rx + "." + r.rz + ".png";
-			File fullSizeImageFile = r.imageFile = new File(outputDir, imageFilename);
-
-			boolean fullSizeNeedsReRender = false;
-			if (force || !fullSizeImageFile.exists() || fullSizeImageFile.lastModified() < r.regionFile.lastModified()) {
-				fullSizeNeedsReRender = true;
-			} else {
-				if (settings.debug)
-					System.err.println("image already up-to-date");
-			}
-
-			boolean anyScalesNeedReRender = false;
-			for (int scale : settings.mapScales) {
-				if (scale == 1)
-					continue;
-				File f = new File(outputDir, "tile." + r.rx + "." + r.rz + ".1-" + scale + ".png");
-				if (force || !f.exists() || f.lastModified() < r.regionFile.lastModified()) {
-					anyScalesNeedReRender = true;
-				}
-			}
-
-			BufferedImage fullSize;
-			if (fullSizeNeedsReRender) {
-				fullSizeImageFile.delete();
-				if (settings.debug)
-					System.err.println("generating " + imageFilename + "...");
-
-				RegionFile rf = new RegionFile(r.regionFile);
-				try {
-					fullSize = renderRegion(rf);
-				} finally {
-					rf.close();
-				}
-
-				try {
-					resetInterval();
-					ImageIO.write(fullSize, "png", fullSizeImageFile);
-					timer.imageSaving += getInterval();
-				} catch (IOException e) {
-					System.err.println("Error writing PNG to " + fullSizeImageFile);
-					e.printStackTrace();
-				}
-				++timer.regionCount;
-			} else if (anyScalesNeedReRender) {
-				fullSize = ImageIO.read(fullSizeImageFile);
-			} else {
+		boolean anyScalesNeedReRender = false;
+		for (int scale : settings.mapScales) {
+			if (scale == 1)
 				continue;
-			}
-
-			for (int scale : settings.mapScales) {
-				if (scale == 1)
-					continue; // Already wrote!
-				File f = new File(outputDir, "tile." + r.rx + "." + r.rz + ".1-" + scale + ".png");
-				if (settings.debug)
-					System.err.println("generating " + f + "...");
-				int size = 512 / scale;
-				BufferedImage rescaled = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
-				Graphics2D g = rescaled.createGraphics();
-				g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-				g.drawImage(fullSize, 0, 0, size, size, 0, 0, 512, 512, null);
-				g.dispose();
-				ImageIO.write(rescaled, "png", f);
+			File f = new File(outputDir, "tile." + r.rx + "." + r.rz + ".1-" + scale + ".png");
+			if (force || !f.exists() || f.lastModified() < r.regionFile.lastModified()) {
+				anyScalesNeedReRender = true;
 			}
 		}
-		timer.total += System.currentTimeMillis() - startTime;
+
+		BufferedImage fullSize;
+		if (fullSizeNeedsReRender) {
+			fullSizeImageFile.delete();
+			if (settings.debug)
+				System.err.println("generating " + imageFilename + "...");
+
+			RegionFile rf = new RegionFile(r.regionFile);
+			try {
+				fullSize = renderRegion(rf);
+			} finally {
+				rf.close();
+			}
+
+			try {
+				resetInterval();
+				ImageIO.write(fullSize, "png", fullSizeImageFile);
+				timer.imageSaving += getInterval();
+			} catch (IOException e) {
+				System.err.println("Error writing PNG to " + fullSizeImageFile);
+				e.printStackTrace();
+			}
+			++timer.regionCount;
+		} else if (anyScalesNeedReRender) {
+			fullSize = ImageIO.read(fullSizeImageFile);
+		} else {
+			return;
+		}
+
+		for (int scale : settings.mapScales) {
+			if (scale == 1)
+				continue; // Already wrote!
+			File f = new File(outputDir, "tile." + r.rx + "." + r.rz + ".1-" + scale + ".png");
+			if (settings.debug)
+				System.err.println("generating " + f + "...");
+			int size = 512 / scale;
+			BufferedImage rescaled = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+			Graphics2D g = rescaled.createGraphics();
+			g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+			g.drawImage(fullSize, 0, 0, size, size, 0, 0, 512, 512, null);
+			g.dispose();
+			ImageIO.write(rescaled, "png", f);
+		}
 	}
 
 	/**
