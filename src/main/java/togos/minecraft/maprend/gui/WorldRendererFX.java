@@ -37,7 +37,7 @@ import togos.minecraft.maprend.gui.RenderedRegion.RenderingState;
 @SuppressWarnings("restriction")
 public class WorldRendererFX extends Canvas implements Runnable {
 
-	public static final int				THREAD_COUNT	= 3;
+	public static final int				THREAD_COUNT	= 4;
 	public static final int				MAX_ZOOM_LEVEL	= 7;											// up to 9 without rounding errors
 
 	protected RegionRenderer			renderer;
@@ -59,8 +59,8 @@ public class WorldRendererFX extends Canvas implements Runnable {
 	private Robot						robot			= Application.GetApplication().createRobot();
 
 	public WorldRendererFX(RegionRenderer renderer) {
-		executor = (ScheduledThreadPoolExecutor) Executors.newScheduledThreadPool(THREAD_COUNT + 1);
-		map = new RenderedMap(executor);
+		executor = (ScheduledThreadPoolExecutor) Executors.newScheduledThreadPool(THREAD_COUNT);
+		map = new RenderedMap(Executors.newScheduledThreadPool(THREAD_COUNT / 2));
 		executor.scheduleAtFixedRate(() -> {
 			try {
 				// update upscaled/downscaled images of chunks
@@ -72,6 +72,7 @@ public class WorldRendererFX extends Canvas implements Runnable {
 				throw e;
 			}
 		}, 1000, 100, TimeUnit.MILLISECONDS);
+		executor.scheduleAtFixedRate(map::evictCache, 10000, 10, TimeUnit.SECONDS);
 
 		this.renderer = Objects.requireNonNull(renderer);
 

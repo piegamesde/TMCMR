@@ -15,6 +15,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.PixelWriter;
 import javafx.scene.image.WritableImage;
+import javafx.scene.paint.Color;
 import togos.minecraft.maprend.core.Region;
 
 public class RenderedMap {
@@ -86,10 +87,10 @@ public class RenderedMap {
 				.expireMaxSize(1024)
 				.expireAfterCreate()
 				.expireAfterUpdate()
-				.expireAfterGet()
+				// .expireAfterGet()
 				.expireAfterGet(1, TimeUnit.MINUTES)
 				.expireOverflow(cacheMapDisk)
-				.expireExecutor(executor)
+				// .expireExecutor(executor)
 				.expireExecutorPeriod(10000)
 				.create();
 		// cacheMapMem = cacheMapDiskMem;
@@ -98,13 +99,12 @@ public class RenderedMap {
 				.expireMaxSize(512)
 				.expireAfterCreate()
 				.expireAfterUpdate()
-				.expireAfterGet()
+				// .expireAfterGet()
 				.expireAfterGet(1, TimeUnit.MINUTES)
 				// .expireOverflow(cacheMapDisk)
-				.expireExecutor(executor)
+				// .expireExecutor(executor)
 				.expireExecutorPeriod(10000)
 				.create();
-
 		cacheMapDisk.checkThreadSafe();
 		cacheMapDiskMem.checkThreadSafe();
 		cacheMapMem.checkThreadSafe();
@@ -123,6 +123,12 @@ public class RenderedMap {
 		cacheMapDisk.close();
 		cacheDBMem.close();
 		cacheDBDisk.close();
+	}
+
+	public void evictCache() {
+		cacheMapDiskMem.expireEvict();
+		cacheMapMem.expireEvict();
+		cacheMapDisk.expireEvict();
 	}
 
 	public void clearReload(Collection<Region> positions) {
@@ -146,21 +152,32 @@ public class RenderedMap {
 
 	public void draw(GraphicsContext gc, int level, AABBd frustum, double scale) {
 		Map<Vector2ic, RenderedRegion> map = get(level > 0 ? 0 : level);
+		gc.setFill(new Color(0.3f, 0.3f, 0.9f, 1.0f)); // Background color
 		plainRegions.values()
 				.stream()
 				.filter(r -> r.isVisible(frustum))
-				.forEach(r -> r.drawBackground(gc));
-		map
-				.entrySet()
-				.stream()
-				.filter(e -> RenderedRegion.isVisible(e.getKey(), level > 0 ? 0 : level, frustum))
-				.map(e -> {
-					RenderedRegion r = e.getValue();
-					if (e.getValue() == null)
-						r = get(level, e.getKey(), true);
-					return r;
-				})
-				.forEach(r -> r.draw(gc, level, frustum));
+				.forEach(r -> r.drawBackground(gc, scale));
+		try {
+			map
+					.entrySet()
+					.stream()
+					.filter(e -> RenderedRegion.isVisible(e.getKey(), level > 0 ? 0 : level, frustum))
+					.map(e -> {
+						RenderedRegion r = e.getValue();
+						if (e.getValue() == null)
+							r = get(level, e.getKey(), true);
+						return r;
+					})
+					.forEach(r -> r.draw(gc, level, frustum, scale));
+		} catch (NullPointerException e) {
+			// This seems to be a pretty rare exception that might be linked to some race hazard when daw() is called during the reloading of the map.
+			// Nonetheless this should not happen because every time it happens on level 0 and at no point in time a level 0 region has a key associated with a
+			// non-null value.
+			System.out.println(level);
+			System.out.println(plainRegions.entrySet());
+			System.out.println(regions.entrySet());
+			throw e;
+		}
 		plainRegions.values()
 				.stream()
 				.filter(r -> r.isVisible(frustum))
@@ -170,6 +187,7 @@ public class RenderedMap {
 	public boolean updateImage(int level, AABBd frustum) {
 		try {
 			// TODO FIXME this won't return (quickly/at all?), causing the application to continue running in background (forever?) after closing.
+			Thread current = Thread.currentThread();
 			return get(level)
 					.entrySet()
 					.stream()
@@ -179,7 +197,7 @@ public class RenderedMap {
 					.filter(r -> r.isVisible(frustum))
 					// .sorted(comp)
 					// .limit(10)
-					.filter(r -> r.updateImage())
+					.filter(r -> current.isInterrupted() ? false : r.updateImage())
 					.collect(Collectors.toList())
 					.size() > 0;
 		} catch (ConcurrentModificationException e) {
@@ -189,8 +207,11 @@ public class RenderedMap {
 	}
 
 	public Map<Vector2ic, RenderedRegion> get(int level) {
-		if (level > 20 || level < -20)
-			throw new StackOverflowError("Internal error");
+		if (new Error().getStackTrace().length > 180)
+			// Sometimes, this throws a StackOverflowError, but Eclipse doesn't show when this method got called before the recursion in the stack trace. This
+			// is to catch the error prematurely in the hope of getting a full stack trace
+			// TODO this is really bad for performance, remove ASAP the bug is found and fixed
+			throw new InternalError("Stack overflow.");
 		Map<Vector2ic, RenderedRegion> ret = regions.get(level);
 		if (ret == null) {
 			Map<Vector2ic, RenderedRegion> ret2 = new HashMap<Vector2ic, RenderedRegion>();

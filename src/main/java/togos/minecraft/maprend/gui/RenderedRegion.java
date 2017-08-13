@@ -134,18 +134,21 @@ public class RenderedRegion {
 		return frustum.testAABB(new AABBd(position.x() * size, position.y() * size, 0, (position.x() + 1) * size, (position.y() + 1) * size, 0));
 	}
 
-	public void draw(GraphicsContext gc, int drawingLevel, AABBd frustum) {
+	public void draw(GraphicsContext gc, int drawingLevel, AABBd frustum, double scale) {
 		// bounds must have been checked here
 
 		int size = WorldRendererFX.pow2(512, -this.level);
+		final int overDraw = 3; // TODO make setting
 
 		WritableImage image = this.image.getImage(false);
 
 		if (image != null) {
+			if (drawingLevel <= this.level && this.level > 0)
+				// Fill background to prevent bleeding from lower levels of detail
+				gc.fillRect(position.x() * size + 1 / scale, position.y() * size + 1 / scale, size - 2 / scale, size - 2 / scale);
 			// Draw that image
 			gc.drawImage(image, position.x() * size, position.y() * size, size, size);
 		}
-		final int overDraw = 3; // TODO make setting
 
 		// Draw below if needed (check bounds)
 		if (drawingLevel > this.level || ((this.level < 0 || drawingLevel > (this.level - overDraw)) && image == null)) {
@@ -153,15 +156,15 @@ public class RenderedRegion {
 					.filter(v -> isVisible(v, this.level + 1, frustum))
 					.map(v -> map.get(this.level + 1, v, true))
 					.filter(r -> r != null)
-					.forEach(r -> r.draw(gc, drawingLevel, frustum));
+					.forEach(r -> r.draw(gc, drawingLevel, frustum, scale));
 		}
 	}
 
-	public void drawBackground(GraphicsContext gc) {
+	/** This method assumes the appropriate fill is already set */
+	public void drawBackground(GraphicsContext gc, double scale) {
 		int size = 512;// WorldRendererFX.pow2(512, -this.level);
-		gc.setFill(new Color(0.3f, 0.3f, 0.9f, 1.0f));
 		// gc.translate(region.coordinates.x * 512, region.coordinates.y * 512);
-		gc.fillRect(position.x() * size - 1, position.y() * size - 1, size + 2, size + 2);
+		gc.fillRect(position.x() * size - 1 / scale, position.y() * size - 1 / scale, size + 2 / scale, size + 2 / scale);
 	}
 
 	public void drawForeground(GraphicsContext gc, AABBd frustum, double scale) {
