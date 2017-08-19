@@ -49,7 +49,7 @@ public class RenderedRegion {
 
 	public void setImage(WritableImage image) {
 		Objects.requireNonNull(image);
-		invalidateTree(false);
+		invalidateTree(true);
 		this.image.setImage(image);
 		valid.set(RenderingState.VALID);
 	}
@@ -168,7 +168,6 @@ public class RenderedRegion {
 	}
 
 	public void drawForeground(GraphicsContext gc, AABBd frustum, double scale) {
-		gc.save();
 		int size = 512;// WorldRendererFX.pow2(512, -this.level);
 		if (valid.get().isInvalid() && image.isImageSet()) {// reduce brightness
 			gc.setFill(new Color(0f, 0f, 0f, 0.5f));
@@ -192,6 +191,5 @@ public class RenderedRegion {
 			gc.fillRect(x, y, m, h);
 			gc.fillRect(x + w - m, y, m, h);
 		}
-		gc.restore();
 	}
 }

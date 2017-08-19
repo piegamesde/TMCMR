@@ -1,17 +1,15 @@
 package togos.minecraft.maprend.gui;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import javax.imageio.ImageIO;
 import org.joml.*;
 import org.mapdb.*;
-import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.image.PixelFormat;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.PixelWriter;
 import javafx.scene.image.WritableImage;
@@ -39,31 +37,34 @@ public class RenderedMap {
 																					}
 
 																				};
+
 	/**
 	 * Thank the JavaFX guys who a) Made WriteableImage not Serializable b) Didn't include any serialization except by converting to BufferedImage for this ugly
 	 * mess.
 	 */
 	public final Serializer<WritableImage>					IMAGE_SERIALIZER	= new Serializer<WritableImage>() {
 
-																					// @Override
-																					// public int compare(WritableImage o1, WritableImage o2) {
-																					// return 0;
-																					// }
+																					@Override
+																					public boolean isTrusted() {
+																						return true;
+																					}
 
 																					@Override
 																					public void serialize(DataOutput2 out, WritableImage value) throws IOException {
-																						// System.out.println("Serializing");
-																						ImageIO.write(SwingFXUtils.fromFXImage(value, null), "png", out);
+																						byte[] data = new byte[512 * 512 * 4];
+																						value.getPixelReader().getPixels(0, 0, 512, 512,
+																								PixelFormat.getByteBgraInstance(), data, 0, 512 * 4);
+																						out.write(data);
 																					}
 
 																					@Override
 																					public WritableImage deserialize(DataInput2 input, int available) throws IOException {
-																						// java.awt.image.RenderedImage
 																						byte[] data = new byte[available];
-																						// System.out.println(available >> 10);
 																						input.readFully(data);
-																						ByteArrayInputStream bain = new ByteArrayInputStream(data);
-																						return SwingFXUtils.toFXImage(ImageIO.read(bain), null);
+																						WritableImage ret = new WritableImage(512, 512);
+																						ret.getPixelWriter().setPixels(0, 0, 512, 512,
+																								PixelFormat.getByteBgraInstance(), data, 0, 512 * 4);
+																						return ret;
 																					}
 																				};
 
@@ -88,9 +89,11 @@ public class RenderedMap {
 				.expireAfterCreate()
 				.expireAfterUpdate()
 				// .expireAfterGet()
-				.expireAfterGet(1, TimeUnit.MINUTES)
+				.expireAfterCreate(30, TimeUnit.SECONDS)
+				.expireAfterUpdate(30, TimeUnit.SECONDS)
+				.expireAfterGet(60, TimeUnit.SECONDS)
 				.expireOverflow(cacheMapDisk)
-				// .expireExecutor(executor)
+				.expireExecutor(executor)
 				.expireExecutorPeriod(10000)
 				.create();
 		// cacheMapMem = cacheMapDiskMem;
@@ -100,9 +103,11 @@ public class RenderedMap {
 				.expireAfterCreate()
 				.expireAfterUpdate()
 				// .expireAfterGet()
-				.expireAfterGet(1, TimeUnit.MINUTES)
+				.expireAfterCreate(30, TimeUnit.SECONDS)
+				.expireAfterUpdate(30, TimeUnit.SECONDS)
+				.expireAfterGet(60, TimeUnit.SECONDS)
 				// .expireOverflow(cacheMapDisk)
-				// .expireExecutor(executor)
+				.expireExecutor(executor)
 				.expireExecutorPeriod(10000)
 				.create();
 		cacheMapDisk.checkThreadSafe();
@@ -137,8 +142,8 @@ public class RenderedMap {
 		cacheMapMem.clear();
 		regions.clear();
 		plainRegions.clear();
-		positions.stream().map(r -> new RenderedRegion(this, r)).forEach(r -> plainRegions.put(r.position, r));
 		regions.put(0, plainRegions);
+		positions.stream().map(r -> new RenderedRegion(this, r)).forEach(r -> plainRegions.put(r.position, r));
 	}
 
 	public void invalidateAll() {
@@ -186,8 +191,10 @@ public class RenderedMap {
 
 	public boolean updateImage(int level, AABBd frustum) {
 		try {
-			// TODO FIXME this won't return (quickly/at all?), causing the application to continue running in background (forever?) after closing.
 			Thread current = Thread.currentThread();
+			if (regions.isEmpty())
+				// Race hazard: updateImage() is called while clearReload() is reloading all the chunks
+				return false;
 			return get(level)
 					.entrySet()
 					.stream()
@@ -196,8 +203,8 @@ public class RenderedMap {
 					// .filter(e -> e.getValue().needsUpdate())
 					.filter(r -> r.isVisible(frustum))
 					// .sorted(comp)
-					// .limit(10)
 					.filter(r -> current.isInterrupted() ? false : r.updateImage())
+					.limit(10)
 					.collect(Collectors.toList())
 					.size() > 0;
 		} catch (ConcurrentModificationException e) {
@@ -207,18 +214,25 @@ public class RenderedMap {
 	}
 
 	public Map<Vector2ic, RenderedRegion> get(int level) {
-		if (new Error().getStackTrace().length > 180)
-			// Sometimes, this throws a StackOverflowError, but Eclipse doesn't show when this method got called before the recursion in the stack trace. This
-			// is to catch the error prematurely in the hope of getting a full stack trace
-			// TODO this is really bad for performance, remove ASAP the bug is found and fixed
-			throw new InternalError("Stack overflow.");
+		// if (new Error().getStackTrace().length > 180)
+		// Sometimes, this throws a StackOverflowError, but Eclipse doesn't show when this method got called before the recursion in the stack trace. This
+		// is to catch the error prematurely in the hope of getting a full stack trace
+		// TODO this is really bad for performance, remove ASAP the bug is found and fixed
+		// throw new InternalError("Stack overflow.");
 		Map<Vector2ic, RenderedRegion> ret = regions.get(level);
-		if (ret == null) {
-			Map<Vector2ic, RenderedRegion> ret2 = new HashMap<Vector2ic, RenderedRegion>();
-			ret = ret2;
-			get(level < 0 ? level + 1 : level - 1).keySet().stream().map(RenderedMap::abovePos).distinct().forEach(v -> ret2.put(v, null));
+		try {
+			// the bug might be when requesting values on level 0 that are null (not calculated)
+			if (ret == null && level != 0) {
+				Map<Vector2ic, RenderedRegion> ret2 = new HashMap<Vector2ic, RenderedRegion>();
+				ret = ret2;
+				// the bug might be to using abovePos() regardless of the level being zoomed in or out
+				get(level < 0 ? level + 1 : level - 1).keySet().stream().map(RenderedMap::abovePos).distinct().forEach(v -> ret2.put(v, null));
 
-			regions.put(level, ret);
+				regions.put(level, ret);
+			}
+		} catch (StackOverflowError e) {
+			System.out.println(level + " " + ret);
+			throw e;
 		}
 		return ret;
 	}
@@ -288,6 +302,21 @@ public class RenderedMap {
 		PixelReader topRightReader = topRight != null ? topRight.getPixelReader() : null;
 		PixelReader bottomLeftReader = bottomLeft != null ? bottomLeft.getPixelReader() : null;
 		PixelReader bottomRightReader = bottomRight != null ? bottomRight.getPixelReader() : null;
+
+		int[] topLeftPixels = genBuffer(512 * 512);
+		int[] topRightPixels = genBuffer(512 * 512);
+		int[] bottomLeftPixels = genBuffer(512 * 512);
+		int[] bottomRightPixels = genBuffer(512 * 512);
+
+		if (topLeftReader != null)
+			topLeftReader.getPixels(0, 0, 512, 512, PixelFormat.getIntArgbInstance(), topLeftPixels, 0, 512);
+		if (topRightReader != null)
+			topRightReader.getPixels(0, 0, 512, 512, PixelFormat.getIntArgbInstance(), topRightPixels, 0, 512);
+		if (bottomLeftReader != null)
+			bottomLeftReader.getPixels(0, 0, 512, 512, PixelFormat.getIntArgbInstance(), bottomLeftPixels, 0, 512);
+		if (bottomRightReader != null)
+			bottomRightReader.getPixels(0, 0, 512, 512, PixelFormat.getIntArgbInstance(), bottomRightPixels, 0, 512);
+
 		PixelWriter writer = output.getPixelWriter();
 
 		// TODO optimize with buffers
@@ -295,30 +324,32 @@ public class RenderedMap {
 			for (int x = 0; x < 256; x++) {
 				int rx = x * 2;
 				int ry = y * 2;
-				writer.setArgb(x, y, topLeftReader != null ? sampleColor(rx, ry, topLeftReader) : 0);
-				writer.setArgb(x + 256, y, topRightReader != null ? sampleColor(rx, ry, topRightReader) : 0);
-				writer.setArgb(x, y + 256, bottomLeftReader != null ? sampleColor(rx, ry, bottomLeftReader) : 0);
-				writer.setArgb(x + 256, y + 256, bottomRightReader != null ? sampleColor(rx, ry, bottomRightReader) : 0);
+				writer.setArgb(x, y, topLeftReader != null ? sampleColor(rx, ry, topLeftPixels) : 0);
+				writer.setArgb(x + 256, y, topRightReader != null ? sampleColor(rx, ry, topRightPixels) : 0);
+				writer.setArgb(x, y + 256, bottomLeftReader != null ? sampleColor(rx, ry, bottomLeftPixels) : 0);
+				writer.setArgb(x + 256, y + 256, bottomRightReader != null ? sampleColor(rx, ry, bottomRightPixels) : 0);
 			}
 		}
 		return output;
 	}
 
-	private static int sampleColor(int x, int y, PixelReader reader) {
-		long a = reader.getArgb(x, y);
-		long b = reader.getArgb(x + 1, y);
-		long c = reader.getArgb(x, y + 1);
-		long d = reader.getArgb(x + 1, y + 1);
+	private static int sampleColor(int x, int y, int[] colors) {
+		// Image image = new Image(is, requestedWidth, requestedHeight, preserveRatio, smooth)
+		// int[] colors = genBuffer(4);
+		// reader.getPixels(x, y, 2, 2, WritablePixelFormat.getIntArgbInstance(), colors, 0, 2);
+
+		int c1 = colors[y * 512 + x], c2 = colors[y * 512 + x + 1], c3 = colors[y * 512 + x + 512], c4 = colors[y * 512 + x + 513];
 		// TODO premultiply alpha to avoid dark edges
-		long ret = 0;
+		long ret = 0;// use long against overflow
+		long a1 = c1 >>> 24, a2 = c2 >>> 24, a3 = c3 >>> 24, a4 = c4 >>> 24;
 		// alpha
-		ret |= (((a & 0xFF000000) + (b & 0xFF000000) + (c & 0xFF000000) + (d & 0xFF000000)) >> 2) & 0xFF000000;
+		ret |= ((a1 + a2 + a3 + a4) << 22) & 0xFF000000;
 		// red
-		ret |= (((a & 0x00FF0000) + (b & 0x00FF0000) + (c & 0x00FF0000) + (d & 0x00FF0000)) >> 2) & 0x00FF0000;
+		ret |= ((((c1 & 0x00FF0000) * a1 + (c2 & 0x00FF0000) * a2 + (c3 & 0x00FF0000) * a3 + (c4 & 0x00FF0000) * a4) / 255) >> 2) & 0x00FF0000;
 		// green
-		ret |= (((a & 0x0000FF00) + (b & 0x0000FF00) + (c & 0x0000FF00) + (d & 0x0000FF00)) >> 2) & 0x0000FF00;
+		ret |= ((((c1 & 0x0000FF00) * a1 + (c2 & 0x0000FF00) * a2 + (c3 & 0x0000FF00) * a3 + (c4 & 0x0000FF00) * a4) / 255) >> 2) & 0x0000FF00;
 		// blue
-		ret |= (((a & 0x000000FF) + (b & 0x000000FF) + (c & 0x000000FF) + (d & 0x000000FF)) >> 2) & 0x000000FF;
+		ret |= ((((c1 & 0x000000FF) * a1 + (c2 & 0x000000FF) * a2 + (c3 & 0x000000FF) * a3 + (c4 & 0x000000FF) * a4) / 255) >> 2) & 0x000000FF;
 		return (int) ret;
 	}
 
@@ -331,19 +362,22 @@ public class RenderedMap {
 		int tileSize = 512 >> levelDiff;
 		int scaleFactor = 1 << levelDiff;
 
+		int[] pixels = genBuffer(tileSize * tileSize);
+		int[] pixel = genBuffer(scaleFactor * scaleFactor);
+		reader.getPixels(subTile.x * tileSize, subTile.y * tileSize, tileSize, tileSize, PixelFormat.getIntArgbInstance(), pixels, 0, tileSize);
+
 		for (int y = 0; y < tileSize; y++) {
 			for (int x = 0; x < tileSize; x++) {
-				int rx = x + subTile.x * tileSize;
-				int ry = y + subTile.y * tileSize;
-				final int argb = reader.getArgb(rx, ry);
-
-				// TODO optimize with buffers
-				for (int dx = 0; dx < scaleFactor; dx++)
-					for (int dy = 0; dy < scaleFactor; dy++) {
-						writer.setArgb(x * scaleFactor + dx, y * scaleFactor + dy, argb);
-					}
+				final int argb = pixels[y * tileSize + x];
+				Arrays.fill(pixel, argb);
+				writer.setPixels(x * scaleFactor, y * scaleFactor, scaleFactor, scaleFactor, PixelFormat.getIntArgbInstance(), pixel, 0, scaleFactor);
 			}
 		}
 		return output;
+	}
+
+	/** Test how much time this takes to see if object pooling is needed. */
+	private static int[] genBuffer(int length) {
+		return new int[length];
 	}
 }

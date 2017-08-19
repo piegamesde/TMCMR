@@ -93,7 +93,7 @@ public class GuiController implements Initializable {
 				else if (e == heightSlider.highValueChangingProperty())
 					panel.getRegionRenderer().settings.maxHeight = (int) Math.round(heightSlider.highValueProperty().getValue().doubleValue());
 				panel.invalidateTextures();
-				panel.renderWorld();
+				panel.repaint();
 			}
 		};
 		heightSlider.lowValueChangingProperty().addListener(heightListener);
