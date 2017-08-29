@@ -280,8 +280,7 @@ public class RegionFile implements Closeable
             this.format = format;
         }
 
-        @Override
-		public void close() {
+        public void close() {
             RegionFile.this.write(x, z, buf, count, format);
         }
     }

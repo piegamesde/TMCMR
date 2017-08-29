@@ -5,7 +5,7 @@ import junit.framework.TestCase;
 import togos.minecraft.maprend.RegionRenderer.RegionRendererCommand;
 
 public class RegionRendererMainTest extends TestCase {
-
+	
 	private RegionRenderer.RegionRendererCommand main;
 
 	public void testDefaultArguments() throws Exception {
@@ -90,7 +90,7 @@ public class RegionRendererMainTest extends TestCase {
 				.fromArguments(toArgs("temp/r.0.0.mca"));
 		assertEquals(false, cmd.shouldCreateTileHtml());
 	}
-
+	
 	public void testNoMinMaxHeights() throws Exception {
 		extractAndAssertValidArgs("-o out in");
 		assertEquals(Integer.MIN_VALUE, main.minHeight);

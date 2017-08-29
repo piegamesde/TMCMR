@@ -8,7 +8,6 @@ import java.util.regex.Pattern;
 
 public class RegionMap
 {
-
 	public static class Region {
 		public int rx, rz;
 		public File regionFile;

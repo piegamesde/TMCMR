@@ -3,10 +3,28 @@ package togos.minecraft.maprend;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.*;
-import java.util.*;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import javax.imageio.ImageIO;
-import org.jnbt.*;
+
+import org.jnbt.ByteArrayTag;
+import org.jnbt.ByteTag;
+import org.jnbt.CompoundTag;
+import org.jnbt.ListTag;
+import org.jnbt.NBTInputStream;
+import org.jnbt.Tag;
+
 import togos.minecraft.maprend.BiomeMap.Biome;
 import togos.minecraft.maprend.BlockMap.Block;
 import togos.minecraft.maprend.RegionMap.Region;
@@ -66,7 +84,7 @@ public class RegionRenderer
 	 * (i.e. blocks with alpha < this will not be shaded, but blocks below them will be)
 	 */
 	private int shadeOpacityCutoff = 0x20; 
-
+	
 	public final RenderSettings	settings;
 
 	public RegionRenderer(RenderSettings settings) throws IOException {
